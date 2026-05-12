@@ -1,0 +1,2008 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GeoRecord • SkyLedger</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&amp;family=Space+Grotesk:wght@500;600&amp;display=swap');
+        
+        :root {
+            --primary: #10b981;
+        }
+        
+        body {
+            font-family: 'Inter', system_ui, sans-serif;
+        }
+        
+        .font-display {
+            font-family: 'Space Grotesk', 'Inter', sans-serif;
+            font-weight: 600;
+        }
+
+        .section {
+            display: none;
+        }
+        
+        .section.active {
+            display: block;
+        }
+
+        .nav-link {
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        
+        .nav-link:hover {
+            background-color: #18181b;
+            transform: translateX(4px);
+        }
+        
+        .nav-link.active {
+            background-color: #10b981;
+            color: white;
+            box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.2);
+        }
+
+        .metric-card {
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+        
+        .metric-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
+        }
+
+        .data-table {
+            border: 1px solid #3f3f46;
+        }
+
+        .data-table th {
+            background-color: #18181b;
+            font-weight: 600;
+            color: #a1a1aa;
+        }
+
+        .leaflet-container {
+            background: #18181b;
+            border-radius: 12px;
+        }
+
+        .sky-gradient {
+            background: linear-gradient(180deg, #0a0a0a 0%, #18181b 100%);
+        }
+
+        .anomaly {
+            animation: pulse-anomaly 2s infinite;
+        }
+
+        @keyframes pulse-anomaly {
+            0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4); }
+            70% { box-shadow: 0 0 0 12px rgba(239, 68, 68, 0); }
+        }
+
+        .tower-marker {
+            filter: drop-shadow(0 0 8px #ef4444);
+        }
+
+        .plane-path {
+            stroke-dasharray: 10 6;
+            animation: dash 1.5s linear infinite;
+        }
+
+        @keyframes dash {
+            to {
+                stroke-dashoffset: -32;
+            }
+        }
+
+        .log-entry {
+            transition: all 0.2s ease;
+        }
+
+        .log-entry:hover {
+            background-color: #27251f;
+            transform: scale(1.01);
+        }
+
+        .stat-value {
+            font-variant-numeric: tabular-nums;
+        }
+
+        .glass {
+            background: rgba(24, 24, 27, 0.85);
+            backdrop-filter: blur(20px);
+        }
+
+        .section-header {
+            background: linear-gradient(to right, #18181b, transparent);
+        }
+    </style>
+</head>
+<body class="bg-zinc-950 text-zinc-200">
+    <!-- Top Navigation -->
+    <nav class="border-b border-zinc-800 bg-zinc-900 sticky top-0 z-50">
+        <div class="max-w-screen-2xl mx-auto">
+            <div class="px-8 py-4 flex items-center justify-between">
+                <div class="flex items-center gap-x-4">
+                    <!-- Logo -->
+                    <div class="flex items-center gap-x-3">
+                        <div class="w-11 h-11 bg-emerald-500 rounded-2xl flex items-center justify-center shadow-lg shadow-emerald-500/30">
+                            <i class="fa-solid fa-satellite text-white text-3xl"></i>
+                        </div>
+                        <div>
+                            <span class="font-display text-3xl font-semibold tracking-tighter">GeoRecord</span>
+                            <span class="text-xs text-emerald-400 font-mono tracking-[3px] block -mt-1">SKYLEDGER</span>
+                        </div>
+                    </div>
+                    
+                    <div class="hidden md:flex items-center bg-zinc-900 border border-zinc-700 rounded-3xl px-1 py-1 text-sm">
+                        <div class="px-4 py-1 flex items-center gap-x-2">
+                            <div class="w-2 h-2 bg-emerald-400 rounded-full animate-pulse"></div>
+                            <span class="text-emerald-400 font-medium text-xs tracking-widest">LIVE • MAY 11 2026</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="flex items-center gap-x-4">
+                    <!-- Location -->
+                    <div onclick="useGeolocation()" class="flex items-center gap-x-2 px-4 py-2 bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 rounded-3xl cursor-pointer transition-colors">
+                        <i class="fa-solid fa-location-dot text-emerald-400"></i>
+                        <div>
+                            <span id="current-location" class="font-medium text-sm">Everglades, FL</span>
+                            <span id="current-coords" class="text-xs text-zinc-500 block -mt-0.5">25.76°N, 80.68°W</span>
+                        </div>
+                    </div>
+
+                    <!-- User -->
+                    <div class="flex items-center gap-x-3">
+                        <div class="text-right">
+                            <div class="text-sm font-medium">Ava Leigh Stewart</div>
+                            <div class="text-xs text-zinc-500">Citizen Observer • Verified</div>
+                        </div>
+                        <div class="w-9 h-9 bg-zinc-700 rounded-2xl overflow-hidden ring-2 ring-emerald-500/30">
+                            <img src="https://pbs.twimg.com/profile_images/1967978195010875392/6G8_XclE.jpg" class="w-full h-full object-cover" alt="User avatar">
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <div class="max-w-screen-2xl mx-auto flex">
+        <!-- Sidebar -->
+        <div class="w-72 border-r border-zinc-800 bg-zinc-900 min-h-[calc(100vh-65px)] p-5 hidden lg:block">
+            <div class="mb-8 px-2">
+                <div class="text-xs uppercase tracking-[2px] text-zinc-500 mb-3 font-medium px-3">MAIN</div>
+                
+                <div onclick="showSection('dashboard')" class="nav-link active flex items-center gap-x-3 px-4 py-3 rounded-3xl mb-1 cursor-pointer" id="nav-dashboard">
+                    <i class="fa-solid fa-tachometer-alt w-5 text-center"></i>
+                    <span class="font-medium">Dashboard</span>
+                </div>
+                
+                <div onclick="showSection('daily-log')" class="nav-link flex items-center gap-x-3 px-4 py-3 rounded-3xl mb-1 cursor-pointer" id="nav-daily-log">
+                    <i class="fa-solid fa-edit w-5 text-center"></i>
+                    <span class="font-medium">Daily Intake</span>
+                </div>
+                
+                <div onclick="showSection('sky-monitor')" class="nav-link flex items-center gap-x-3 px-4 py-3 rounded-3xl mb-1 cursor-pointer" id="nav-sky-monitor">
+                    <i class="fa-solid fa-cloud-sun w-5 text-center"></i>
+                    <span class="font-medium">Sky Monitor</span>
+                </div>
+                
+                <div onclick="showSection('signals')" class="nav-link flex items-center gap-x-3 px-4 py-3 rounded-3xl mb-1 cursor-pointer" id="nav-signals">
+                    <i class="fa-solid fa-broadcast-tower w-5 text-center"></i>
+                    <span class="font-medium">Signals &amp; Radiation</span>
+                </div>
+            </div>
+
+            <div class="mb-8 px-2">
+                <div class="text-xs uppercase tracking-[2px] text-zinc-500 mb-3 font-medium px-3">RECORDS</div>
+                
+                <div onclick="showSection('records')" class="nav-link flex items-center gap-x-3 px-4 py-3 rounded-3xl mb-1 cursor-pointer" id="nav-records">
+                    <i class="fa-solid fa-search w-5 text-center"></i>
+                    <span class="font-medium">Searchable Archive</span>
+                </div>
+                
+                <div onclick="showSection('companies')" class="nav-link flex items-center gap-x-3 px-4 py-3 rounded-3xl mb-1 cursor-pointer" id="nav-companies">
+                    <i class="fa-solid fa-building w-5 text-center"></i>
+                    <span class="font-medium">Contracted Operators</span>
+                </div>
+                
+                <div onclick="showSection('tests')" class="nav-link flex items-center gap-x-3 px-4 py-3 rounded-3xl mb-1 cursor-pointer" id="nav-tests">
+                    <i class="fa-solid fa-flask w-5 text-center"></i>
+                    <span class="font-medium">Contaminant Tests</span>
+                </div>
+                
+                <div onclick="showSection('flights')" class="nav-link flex items-center gap-x-3 px-4 py-3 rounded-3xl mb-1 cursor-pointer" id="nav-flights">
+                    <i class="fa-solid fa-plane w-5 text-center"></i>
+                    <span class="font-medium">Flight Paths</span>
+                </div>
+            </div>
+
+            <div class="px-2">
+                <div class="text-xs uppercase tracking-[2px] text-zinc-500 mb-3 font-medium px-3">ACTIONS</div>
+                
+                <div onclick="mainstreamDailyData()" class="flex items-center justify-center gap-x-2 px-4 py-3 bg-emerald-600 hover:bg-emerald-500 text-white rounded-3xl cursor-pointer mb-2 shadow-lg shadow-emerald-900/50">
+                    <i class="fa-solid fa-sync-alt"></i>
+                    <span class="font-semibold text-sm">MAINSTREAM TODAY'S DATA</span>
+                </div>
+                
+                <div onclick="showSection('reports')" class="flex items-center justify-center gap-x-2 px-4 py-3 border border-zinc-700 hover:bg-zinc-800 rounded-3xl cursor-pointer text-sm">
+                    <i class="fa-solid fa-file-export"></i>
+                    <span class="font-medium">Generate Legal Report</span>
+                </div>
+            </div>
+
+            <div class="absolute bottom-6 left-6 right-6 text-[10px] text-zinc-500 px-3">
+                Data stored locally • Export for insurance &amp; legal use<br>
+                <span class="text-emerald-500">v2.1 • Inspired by @avaleighfilm</span>
+            </div>
+        </div>
+
+        <!-- Main Content -->
+        <div class="flex-1 p-8 max-w-[1200px]">
+            
+            <!-- DASHBOARD -->
+            <div id="section-dashboard" class="section active">
+                <div class="mb-8">
+                    <div class="flex items-end justify-between">
+                        <div>
+                            <h1 class="font-display text-5xl tracking-tighter font-semibold">Good evening, Ava.</h1>
+                            <p class="text-xl text-zinc-400 mt-1">Here's today's transparency snapshot for <span class="text-emerald-400">Everglades, Florida</span></p>
+                        </div>
+                        <div class="text-right">
+                            <div class="text-xs text-zinc-500">LAST SYNC</div>
+                            <div id="last-sync" class="font-mono text-sm">2026-05-11 23:41 PDT</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Key Metrics -->
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5 mb-8">
+                    <!-- Sunlight -->
+                    <div class="metric-card bg-zinc-900 border border-zinc-700 rounded-3xl p-6">
+                        <div class="flex justify-between items-start mb-4">
+                            <div>
+                                <div class="text-xs tracking-widest text-amber-400">SUNLIGHT</div>
+                                <div class="text-4xl font-semibold tabular-nums mt-1" id="dash-sunlight">9.8</div>
+                                <div class="text-xs text-zinc-500">hours observed <span class="text-red-400">(-27%)</span></div>
+                            </div>
+                            <i class="fa-solid fa-sun text-4xl text-amber-400"></i>
+                        </div>
+                        <div class="h-2 bg-zinc-800 rounded-full overflow-hidden">
+                            <div class="h-2 bg-amber-400 rounded-full" style="width: 73%"></div>
+                        </div>
+                        <div class="flex justify-between text-xs mt-1.5 text-zinc-500">
+                            <div>Expected: 13.4h</div>
+                            <div class="text-red-400 font-medium">-3.6h anomaly</div>
+                        </div>
+                    </div>
+
+                    <!-- Tower Signals -->
+                    <div class="metric-card bg-zinc-900 border border-zinc-700 rounded-3xl p-6">
+                        <div class="flex justify-between items-start mb-4">
+                            <div>
+                                <div class="text-xs tracking-widest text-red-400">TOWER SIGNALS</div>
+                                <div class="text-4xl font-semibold tabular-nums mt-1" id="dash-tower">-82</div>
+                                <div class="text-xs text-zinc-500">dBm average • 47 towers</div>
+                            </div>
+                            <i class="fa-solid fa-broadcast-tower text-4xl text-red-400"></i>
+                        </div>
+                        <div class="flex items-center gap-x-2 text-xs">
+                            <div class="px-2.5 py-1 bg-red-900/40 text-red-400 rounded-2xl text-[10px] font-medium">5G ACTIVE</div>
+                            <div class="px-2.5 py-1 bg-orange-900/40 text-orange-400 rounded-2xl text-[10px] font-medium">HIGH DENSITY</div>
+                        </div>
+                    </div>
+
+                    <!-- Microwave -->
+                    <div class="metric-card bg-zinc-900 border border-zinc-700 rounded-3xl p-6">
+                        <div class="flex justify-between items-start mb-4">
+                            <div>
+                                <div class="text-xs tracking-widest text-violet-400">MICROWAVE ZONES</div>
+                                <div class="text-4xl font-semibold tabular-nums mt-1" id="dash-microwave">4.7</div>
+                                <div class="text-xs text-zinc-500">μW/cm² peak • 3 active zones</div>
+                            </div>
+                            <i class="fa-solid fa-microchip text-4xl text-violet-400"></i>
+                        </div>
+                        <div class="text-xs flex items-center gap-x-1.5">
+                            <span class="text-red-400">↑ 214% from baseline</span>
+                            <span class="px-1.5 py-px bg-red-500/20 text-red-400 text-[10px] rounded">ALERT</span>
+                        </div>
+                    </div>
+
+                    <!-- Sky Coverage -->
+                    <div class="metric-card bg-zinc-900 border border-zinc-700 rounded-3xl p-6">
+                        <div class="flex justify-between items-start mb-4">
+                            <div>
+                                <div class="text-xs tracking-widest text-sky-400">SKY MONITOR</div>
+                                <div class="text-4xl font-semibold tabular-nums mt-1" id="dash-sky">61</div>
+                                <div class="text-xs text-zinc-500">% contrail / aerosol coverage</div>
+                            </div>
+                            <i class="fa-solid fa-cloud text-4xl text-sky-400"></i>
+                        </div>
+                        <div class="text-xs">12 suspected spray flights today • <span class="text-emerald-400">3 confirmed patterns</span></div>
+                    </div>
+                </div>
+
+                <!-- Event Alert + Quick Charts -->
+                <div class="grid grid-cols-1 lg:grid-cols-5 gap-5">
+                    <!-- Event Alert -->
+                    <div class="lg:col-span-3 bg-zinc-900 border-l-4 border-red-500 rounded-3xl p-6">
+                        <div class="flex items-start gap-x-4">
+                            <div class="mt-1">
+                                <i class="fa-solid fa-exclamation-triangle text-red-500 text-3xl"></i>
+                            </div>
+                            <div class="flex-1">
+                                <div class="flex items-center gap-x-3">
+                                    <span class="font-semibold text-lg">CRITICAL EVENT LOGGED</span>
+                                    <span class="px-3 py-px text-xs bg-red-500/90 text-white rounded-2xl">MAY 11 • EVERGLADES</span>
+                                </div>
+                                <p class="mt-2 text-sm text-zinc-300">Straight-line fire path observed in Everglades (0% containment). Correlated with 3 high-altitude flight paths and elevated microwave readings. Sunlight reduced 27% from expected. <span class="text-red-400 font-medium">Recommend immediate legal documentation.</span></p>
+                                
+                                <div class="mt-4 flex gap-x-3">
+                                    <button onclick="viewEventDetail()" class="px-5 py-2 text-xs font-semibold bg-white text-zinc-900 rounded-3xl flex items-center gap-x-2 hover:bg-zinc-100">
+                                        <i class="fa-solid fa-eye"></i> 
+                                        <span>VIEW FULL EVENT</span>
+                                    </button>
+                                    <button onclick="generateQuickReport()" class="px-5 py-2 text-xs font-semibold border border-zinc-600 hover:bg-zinc-800 rounded-3xl flex items-center gap-x-2">
+                                        <i class="fa-solid fa-file-pdf"></i> 
+                                        <span>EXPORT FOR INSURANCE</span>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Mini Chart -->
+                    <div class="lg:col-span-2 bg-zinc-900 border border-zinc-700 rounded-3xl p-6">
+                        <div class="flex items-center justify-between mb-4">
+                            <div class="font-semibold">Sunlight Deviation (30-day)</div>
+                            <div class="text-xs px-2 py-1 bg-zinc-800 rounded-2xl">TRENDING ↓</div>
+                        </div>
+                        <canvas id="sunlight-chart" height="80"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <!-- DAILY LOG -->
+            <div id="section-daily-log" class="section">
+                <div class="mb-6">
+                    <h2 class="font-display text-4xl tracking-tight">Daily Intake Log</h2>
+                    <p class="text-zinc-400">Record today's observations for permanent searchable archive</p>
+                </div>
+
+                <div class="bg-zinc-900 border border-zinc-700 rounded-3xl p-8 max-w-4xl">
+                    <form id="daily-form" onsubmit="saveDailyLog(event)">
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <!-- Location & Date -->
+                            <div>
+                                <label class="block text-xs tracking-widest text-zinc-500 mb-1.5">DATE &amp; TIME</label>
+                                <input type="datetime-local" id="log-date" value="2026-05-11T20:30" class="w-full bg-zinc-950 border border-zinc-700 rounded-2xl px-4 py-3 text-sm focus:outline-none focus:border-emerald-500">
+                            </div>
+                            
+                            <div>
+                                <label class="block text-xs tracking-widest text-zinc-500 mb-1.5">LOCATION</label>
+                                <div class="flex gap-x-2">
+                                    <input type="text" id="log-location" value="Everglades National Park, FL" class="flex-1 bg-zinc-950 border border-zinc-700 rounded-2xl px-4 py-3 text-sm focus:outline-none focus:border-emerald-500">
+                                    <button type="button" onclick="useGeolocationForLog()" class="px-4 bg-zinc-800 border border-zinc-700 hover:bg-zinc-700 rounded-2xl text-xs flex items-center"><i class="fa-solid fa-location-dot"></i></button>
+                                </div>
+                            </div>
+
+                            <!-- Sunlight -->
+                            <div class="md:col-span-2">
+                                <label class="block text-xs tracking-widest text-zinc-500 mb-1.5">SUNLIGHT HOURS</label>
+                                <div class="grid grid-cols-3 gap-4">
+                                    <div>
+                                        <div class="text-xs text-zinc-500 mb-1">Observed</div>
+                                        <input type="number" step="0.1" id="log-sun-observed" value="9.8" class="w-full bg-zinc-950 border border-zinc-700 rounded-2xl px-4 py-3 text-sm">
+                                    </div>
+                                    <div>
+                                        <div class="text-xs text-zinc-500 mb-1">Expected (lat/date)</div>
+                                        <input type="number" step="0.1" id="log-sun-expected" value="13.4" class="w-full bg-zinc-950 border border-zinc-700 rounded-2xl px-4 py-3 text-sm">
+                                    </div>
+                                    <div>
+                                        <div class="text-xs text-zinc-500 mb-1">Deviation %</div>
+                                        <div class="bg-zinc-950 border border-zinc-700 rounded-2xl px-4 py-3 text-sm flex items-center text-red-400 font-semibold" id="log-sun-dev">−27%</div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Tower Signals -->
+                            <div>
+                                <label class="block text-xs tracking-widest text-zinc-500 mb-1.5">TOWER SIGNALS</label>
+                                <div class="space-y-3">
+                                    <div class="flex gap-x-3">
+                                        <div class="flex-1">
+                                            <div class="text-xs text-zinc-500">Avg Signal (dBm)</div>
+                                            <input type="number" id="log-tower-signal" value="-82" class="w-full bg-zinc-950 border border-zinc-700 rounded-2xl px-4 py-2.5 text-sm">
+                                        </div>
+                                        <div class="flex-1">
+                                            <div class="text-xs text-zinc-500">Towers Nearby</div>
+                                            <input type="number" id="log-tower-count" value="47" class="w-full bg-zinc-950 border border-zinc-700 rounded-2xl px-4 py-2.5 text-sm">
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <div class="text-xs text-zinc-500 mb-1">Dominant Bands</div>
+                                        <div class="flex gap-x-2">
+                                            <label class="flex-1 flex items-center gap-x-2 text-xs bg-zinc-950 border border-zinc-700 px-3 py-2 rounded-2xl"><input type="checkbox" checked> 5G mmWave</label>
+                                            <label class="flex-1 flex items-center gap-x-2 text-xs bg-zinc-950 border border-zinc-700 px-3 py-2 rounded-2xl"><input type="checkbox" checked> LTE Band 66</label>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Microwave -->
+                            <div>
+                                <label class="block text-xs tracking-widest text-zinc-500 mb-1.5">MICROWAVE RADIATION</label>
+                                <div class="space-y-3">
+                                    <div>
+                                        <div class="text-xs text-zinc-500">Peak Level (μW/cm²)</div>
+                                        <input type="number" step="0.1" id="log-microwave" value="4.7" class="w-full bg-zinc-950 border border-zinc-700 rounded-2xl px-4 py-2.5 text-sm">
+                                    </div>
+                                    <div>
+                                        <div class="text-xs text-zinc-500 mb-1">Zone Description</div>
+                                        <input type="text" id="log-microwave-zone" value="Everglades West — Active 14:00-22:00" class="w-full bg-zinc-950 border border-zinc-700 rounded-2xl px-4 py-2.5 text-sm">
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Sky Observations -->
+                            <div class="md:col-span-2">
+                                <label class="block text-xs tracking-widest text-zinc-500 mb-1.5">SKY OBSERVATIONS</label>
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div>
+                                        <div class="text-xs text-zinc-500 mb-1">Contrail / Aerosol Coverage</div>
+                                        <div class="flex items-center gap-x-3">
+                                            <input type="range" id="log-contrail" min="0" max="100" value="61" class="flex-1 accent-emerald-500" oninput="updateContrailValue(this.value)">
+                                            <span id="contrail-value" class="font-mono w-12 text-center text-lg font-semibold">61%</span>
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <div class="text-xs text-zinc-500 mb-1">Number of Visible Spray Aircraft</div>
+                                        <input type="number" id="log-spray-planes" value="12" class="w-full bg-zinc-950 border border-zinc-700 rounded-2xl px-4 py-2.5 text-sm">
+                                    </div>
+                                </div>
+                                
+                                <div class="mt-4">
+                                    <div class="text-xs text-zinc-500 mb-1">Sky Notes &amp; Anomalies</div>
+                                    <textarea id="log-notes" rows="3" class="w-full bg-zinc-950 border border-zinc-700 rounded-2xl px-4 py-3 text-sm resize-y" placeholder="Straight fire line observed at 16:42. Persistent grid patterns in sky. Strong chemical odor reported by rangers."></textarea>
+                                </div>
+                            </div>
+
+                            <!-- Photos -->
+                            <div class="md:col-span-2">
+                                <label class="block text-xs tracking-widest text-zinc-500 mb-1.5">EVIDENCE PHOTOS (max 6)</label>
+                                <div class="flex items-center gap-x-4">
+                                    <label class="cursor-pointer flex items-center justify-center w-24 h-24 border border-dashed border-zinc-600 hover:border-emerald-500 rounded-3xl flex-col gap-y-1 text-center">
+                                        <i class="fa-solid fa-camera text-2xl text-zinc-400"></i>
+                                        <span class="text-xs text-zinc-400">Upload</span>
+                                        <input type="file" id="log-photos" multiple accept="image/*" class="hidden" onchange="handlePhotoUpload(event)">
+                                    </label>
+                                    <div id="photo-previews" class="flex flex-wrap gap-2"></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="mt-8 flex justify-end gap-x-3">
+                            <button type="button" onclick="clearDailyForm()" class="px-8 py-3 text-sm border border-zinc-700 hover:bg-zinc-800 rounded-3xl font-medium">CLEAR</button>
+                            <button type="submit" class="px-10 py-3 bg-emerald-600 hover:bg-emerald-500 text-white rounded-3xl font-semibold flex items-center gap-x-2">
+                                <i class="fa-solid fa-save"></i>
+                                <span>SAVE TO PERMANENT RECORD</span>
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <!-- SKY MONITOR -->
+            <div id="section-sky-monitor" class="section">
+                <div class="mb-6 flex items-end justify-between">
+                    <div>
+                        <h2 class="font-display text-4xl tracking-tight">Sky Monitor</h2>
+                        <p class="text-zinc-400">Real-time visualization • Towers • Microwave zones • Flight paths</p>
+                    </div>
+                    <div>
+                        <button onclick="scanSkies()" class="px-6 py-2.5 bg-sky-600 hover:bg-sky-500 text-sm rounded-3xl flex items-center gap-x-2 font-medium">
+                            <i class="fa-solid fa-satellite"></i> 
+                            <span>SCAN SKIES NOW</span>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 lg:grid-cols-5 gap-5">
+                    <!-- Map -->
+                    <div class="lg:col-span-3 bg-zinc-900 border border-zinc-700 rounded-3xl overflow-hidden" style="height: 520px;">
+                        <div id="sky-map" class="w-full h-full"></div>
+                    </div>
+
+                    <!-- Live Stats -->
+                    <div class="lg:col-span-2 space-y-5">
+                        <div class="bg-zinc-900 border border-zinc-700 rounded-3xl p-6">
+                            <div class="uppercase text-xs tracking-[1.5px] text-sky-400 mb-4">LIVE AERIAL ACTIVITY</div>
+                            
+                            <div class="space-y-4 text-sm">
+                                <div class="flex justify-between items-center">
+                                    <div class="flex items-center gap-x-3">
+                                        <i class="fa-solid fa-plane text-sky-400"></i>
+                                        <span>Active Aircraft</span>
+                                    </div>
+                                    <span class="font-mono font-semibold text-xl" id="live-planes">17</span>
+                                </div>
+                                <div class="flex justify-between items-center">
+                                    <div class="flex items-center gap-x-3">
+                                        <i class="fa-solid fa-route text-emerald-400"></i>
+                                        <span>Suspected Spray Paths</span>
+                                    </div>
+                                    <span class="font-mono font-semibold text-xl text-red-400" id="live-spray">4</span>
+                                </div>
+                                <div class="flex justify-between items-center">
+                                    <div class="flex items-center gap-x-3">
+                                        <i class="fa-solid fa-cloud text-zinc-400"></i>
+                                        <span>Persistent Contrails</span>
+                                    </div>
+                                    <span class="font-mono font-semibold text-xl">61%</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="bg-zinc-900 border border-zinc-700 rounded-3xl p-6">
+                            <div class="text-xs uppercase tracking-widest text-zinc-400 mb-4">CURRENT CONDITIONS</div>
+                            
+                            <div class="space-y-3 text-sm">
+                                <div>
+                                    <div class="flex justify-between text-xs mb-1"><span>Grid Pattern Density</span><span class="font-mono">HIGH</span></div>
+                                    <div class="h-1.5 bg-zinc-800 rounded"><div class="h-1.5 w-[78%] bg-orange-500 rounded" style="width:78%"></div></div>
+                                </div>
+                                <div>
+                                    <div class="flex justify-between text-xs mb-1"><span>Chemical Signature (IR)</span><span class="font-mono">DETECTED</span></div>
+                                    <div class="h-1.5 bg-zinc-800 rounded"><div class="h-1.5 w-[92%] bg-red-500 rounded" style="width:92%"></div></div>
+                                </div>
+                            </div>
+                            
+                            <div class="mt-5 pt-4 border-t border-zinc-700 text-xs text-emerald-400 flex items-center gap-x-2">
+                                <i class="fa-solid fa-check-circle"></i> 
+                                <span>3 new flight paths added in last 47 minutes</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- SIGNALS & RADIATION -->
+            <div id="section-signals" class="section">
+                <div class="mb-6">
+                    <h2 class="font-display text-4xl tracking-tight">Signals &amp; Radiation</h2>
+                    <p class="text-zinc-400">Tower emissions • Microwave zones • 5G / RF monitoring</p>
+                </div>
+
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <div class="bg-zinc-900 border border-zinc-700 rounded-3xl p-7">
+                        <h3 class="font-semibold mb-5 flex items-center gap-x-2"><i class="fa-solid fa-broadcast-tower text-red-400"></i> NEARBY TOWERS</h3>
+                        
+                        <div class="space-y-3 text-sm" id="tower-list">
+                            <!-- Populated by JS -->
+                        </div>
+                    </div>
+
+                    <div class="bg-zinc-900 border border-zinc-700 rounded-3xl p-7">
+                        <h3 class="font-semibold mb-5 flex items-center gap-x-2"><i class="fa-solid fa-microchip text-violet-400"></i> MICROWAVE ZONES</h3>
+                        
+                        <div class="space-y-4">
+                            <div class="p-4 bg-zinc-950 rounded-2xl border border-red-900/50">
+                                <div class="flex justify-between">
+                                    <div>
+                                        <div class="font-medium">Everglades West Zone A</div>
+                                        <div class="text-xs text-red-400">4.7 μW/cm² • Active since 14:22</div>
+                                    </div>
+                                    <div class="text-right">
+                                        <div class="text-red-400 font-mono text-lg">214%</div>
+                                        <div class="text-xs text-red-400">above baseline</div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="p-4 bg-zinc-950 rounded-2xl border border-orange-900/50">
+                                <div class="flex justify-between">
+                                    <div>
+                                        <div class="font-medium">Miami-Dade Corridor</div>
+                                        <div class="text-xs text-orange-400">2.9 μW/cm² • 19:05 peak</div>
+                                    </div>
+                                    <div class="text-right">
+                                        <div class="text-orange-400 font-mono text-lg">118%</div>
+                                        <div class="text-xs text-orange-400">above baseline</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- RECORDS SEARCH -->
+            <div id="section-records" class="section">
+                <div class="mb-6 flex items-center justify-between">
+                    <div>
+                        <h2 class="font-display text-4xl tracking-tight">Searchable Archive</h2>
+                        <p class="text-zinc-400">All logged entries • Filter for insurance &amp; legal review</p>
+                    </div>
+                    <div>
+                        <button onclick="exportAllRecords()" class="px-5 py-2 text-xs border border-emerald-600 text-emerald-400 hover:bg-emerald-900/30 rounded-3xl flex items-center gap-x-2">
+                            <i class="fa-solid fa-download"></i> <span>EXPORT CSV</span>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="mb-4 flex flex-wrap gap-3">
+                    <input type="text" id="search-input" placeholder="Search notes, locations, events..." class="bg-zinc-900 border border-zinc-700 px-4 py-2 rounded-3xl text-sm w-80 focus:outline-none focus:border-emerald-500" onkeyup="filterRecords()">
+                    
+                    <select id="filter-date" onchange="filterRecords()" class="bg-zinc-900 border border-zinc-700 px-4 py-2 rounded-3xl text-sm">
+                        <option value="">All Dates</option>
+                        <option value="2026-05">May 2026</option>
+                        <option value="2026-04">April 2026</option>
+                    </select>
+                </div>
+
+                <div class="bg-zinc-900 border border-zinc-700 rounded-3xl overflow-hidden">
+                    <table class="w-full text-sm data-table">
+                        <thead>
+                            <tr>
+                                <th class="px-6 py-4 text-left font-normal">DATE</th>
+                                <th class="px-6 py-4 text-left font-normal">LOCATION</th>
+                                <th class="px-6 py-4 text-left font-normal">SUNLIGHT</th>
+                                <th class="px-6 py-4 text-left font-normal">MICROWAVE</th>
+                                <th class="px-6 py-4 text-left font-normal">CONTRAILS</th>
+                                <th class="px-6 py-4 text-left font-normal">ACTIONS</th>
+                            </tr>
+                        </thead>
+                        <tbody id="records-table-body" class="divide-y divide-zinc-800 text-sm">
+                            <!-- Populated dynamically -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- COMPANIES -->
+            <div id="section-companies" class="section">
+                <div class="mb-6 flex items-center justify-between">
+                    <div>
+                        <h2 class="font-display text-4xl tracking-tight">Contracted Spray Operators</h2>
+                        <p class="text-zinc-400">Companies with known or alleged geoengineering / cloud seeding contracts</p>
+                    </div>
+                    <button onclick="showAddCompanyModal()" class="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-sm rounded-3xl flex items-center gap-x-2">
+                        <i class="fa-solid fa-plus"></i> <span>ADD CONTRACTOR</span>
+                    </button>
+                </div>
+
+                <div class="bg-zinc-900 border border-zinc-700 rounded-3xl overflow-hidden">
+                    <table class="w-full text-sm">
+                        <thead class="bg-zinc-950">
+                            <tr>
+                                <th class="px-6 py-4 text-left font-normal">COMPANY</th>
+                                <th class="px-6 py-4 text-left font-normal">TYPE</th>
+                                <th class="px-6 py-4 text-left font-normal">CONTRACTED BY</th>
+                                <th class="px-6 py-4 text-left font-normal">ACTIVE REGIONS</th>
+                                <th class="px-6 py-4 text-left font-normal">STATUS</th>
+                                <th class="px-6 py-4 w-12"></th>
+                            </tr>
+                        </thead>
+                        <tbody id="companies-table" class="divide-y divide-zinc-800">
+                            <!-- Populated by JS -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- TESTS -->
+            <div id="section-tests" class="section">
+                <div class="mb-6 flex items-center justify-between">
+                    <div>
+                        <h2 class="font-display text-4xl tracking-tight">Contaminant Test Results</h2>
+                        <p class="text-zinc-400">Lab results from air, soil, water &amp; rainwater samples</p>
+                    </div>
+                    <button onclick="showAddTestModal()" class="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-sm rounded-3xl flex items-center gap-x-2">
+                        <i class="fa-solid fa-plus"></i> <span>ADD TEST RESULT</span>
+                    </button>
+                </div>
+
+                <div class="bg-zinc-900 border border-zinc-700 rounded-3xl overflow-hidden">
+                    <table class="w-full text-sm data-table">
+                        <thead>
+                            <tr>
+                                <th class="px-6 py-4 text-left font-normal">DATE</th>
+                                <th class="px-6 py-4 text-left font-normal">LOCATION / SAMPLE</th>
+                                <th class="px-6 py-4 text-left font-normal">CONTAMINANTS</th>
+                                <th class="px-6 py-4 text-left font-normal">RESULTS</th>
+                                <th class="px-6 py-4 text-left font-normal">LAB</th>
+                                <th class="px-6 py-4"></th>
+                            </tr>
+                        </thead>
+                        <tbody id="tests-table-body" class="divide-y divide-zinc-800">
+                            <!-- Populated by JS -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- FLIGHTS -->
+            <div id="section-flights" class="section">
+                <div class="mb-6">
+                    <h2 class="font-display text-4xl tracking-tight">Flight Path Tracker</h2>
+                    <p class="text-zinc-400">Suspected spray aircraft • ADS-B correlated paths • Historical routes</p>
+                </div>
+
+                <div class="grid grid-cols-1 lg:grid-cols-5 gap-6">
+                    <div class="lg:col-span-3 bg-zinc-900 border border-zinc-700 rounded-3xl p-6">
+                        <div class="flex justify-between items-center mb-4">
+                            <div class="font-semibold">Tracked Flights — Last 48 Hours</div>
+                            <button onclick="addSimulatedFlight()" class="text-xs px-4 py-1.5 bg-sky-600 hover:bg-sky-500 rounded-3xl flex items-center gap-x-1.5 text-sm"><i class="fa-solid fa-plus"></i> <span>ADD FLIGHT</span></button>
+                        </div>
+                        
+                        <div class="max-h-[420px] overflow-auto pr-2" id="flights-list">
+                            <!-- Populated by JS -->
+                        </div>
+                    </div>
+
+                    <div class="lg:col-span-2 bg-zinc-900 border border-zinc-700 rounded-3xl p-6">
+                        <div class="text-xs uppercase tracking-widest mb-4 text-zinc-400">FLIGHT STATISTICS</div>
+                        <div class="space-y-6">
+                            <div>
+                                <div class="flex justify-between text-xs mb-2"><span>Total tracked (May 2026)</span><span class="font-mono">184</span></div>
+                                <div class="h-px bg-zinc-700"></div>
+                            </div>
+                            <div class="grid grid-cols-2 gap-4 text-center">
+                                <div class="bg-zinc-950 rounded-2xl p-4">
+                                    <div class="text-3xl font-semibold text-red-400">47</div>
+                                    <div class="text-xs text-zinc-400">High-altitude loiter patterns</div>
+                                </div>
+                                <div class="bg-zinc-950 rounded-2xl p-4">
+                                    <div class="text-3xl font-semibold text-emerald-400">12</div>
+                                    <div class="text-xs text-zinc-400">Grid formations</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- REPORTS -->
+            <div id="section-reports" class="section">
+                <div class="max-w-2xl mx-auto text-center py-12">
+                    <i class="fa-solid fa-file-contract text-7xl text-emerald-400 mb-6"></i>
+                    <h2 class="font-display text-4xl tracking-tight mb-3">Generate Official Report</h2>
+                    <p class="text-zinc-400 max-w-md mx-auto">Create a timestamped, exportable PDF package suitable for insurance claims, legal filings, or regulatory complaints.</p>
+                    
+                    <div class="mt-10 flex flex-col gap-y-3 max-w-xs mx-auto">
+                        <button onclick="generateFullReport()" class="w-full py-4 bg-emerald-600 hover:bg-emerald-500 rounded-3xl font-semibold flex items-center justify-center gap-x-3">
+                            <i class="fa-solid fa-file-pdf"></i> 
+                            <span>GENERATE FULL MAY 2026 REPORT</span>
+                        </button>
+                        
+                        <button onclick="generateQuickReport()" class="w-full py-4 border border-zinc-600 hover:bg-zinc-900 rounded-3xl text-sm flex items-center justify-center gap-x-3">
+                            <span>Quick Event Report (Everglades Fire)</span>
+                        </button>
+                    </div>
+                    
+                    <div class="mt-8 text-xs text-zinc-500">Includes: all daily logs • charts • photos • company references • flight data • chain-of-custody timestamps</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add Company Modal -->
+    <div id="company-modal" onclick="if (event.target.id === 'company-modal') hideModals()" class="hidden fixed inset-0 bg-black/70 flex items-center justify-center z-[100]">
+        <div onclick="event.stopImmediatePropagation()" class="bg-zinc-900 border border-zinc-700 rounded-3xl w-full max-w-md p-7">
+            <h3 class="font-semibold text-xl mb-5">Add New Contractor</h3>
+            
+            <div class="space-y-4">
+                <div>
+                    <label class="text-xs text-zinc-400">Company Name</label>
+                    <input id="company-name" type="text" class="w-full mt-1 bg-zinc-950 border border-zinc-700 rounded-2xl px-4 py-3 text-sm" placeholder="AeroSpray Dynamics LLC">
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="text-xs text-zinc-400">Type</label>
+                        <select id="company-type" class="w-full mt-1 bg-zinc-950 border border-zinc-700 rounded-2xl px-4 py-3 text-sm">
+                            <option>Cloud Seeding</option>
+                            <option>Stratospheric Aerosol Injection</option>
+                            <option>Weather Modification</option>
+                            <option>Military Contractor</option>
+                            <option>Private Geoengineering</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="text-xs text-zinc-400">Contracted By</label>
+                        <input id="company-contractor" type="text" class="w-full mt-1 bg-zinc-950 border border-zinc-700 rounded-2xl px-4 py-3 text-sm" value="U.S. Government / Private">
+                    </div>
+                </div>
+                <div>
+                    <label class="text-xs text-zinc-400">Active Regions</label>
+                    <input id="company-regions" type="text" class="w-full mt-1 bg-zinc-950 border border-zinc-700 rounded-2xl px-4 py-3 text-sm" value="Florida, Southwest US">
+                </div>
+            </div>
+            
+            <div class="flex gap-x-3 mt-7">
+                <button onclick="hideModals()" class="flex-1 py-3 border border-zinc-700 rounded-3xl text-sm">CANCEL</button>
+                <button onclick="addCompany()" class="flex-1 py-3 bg-emerald-600 hover:bg-emerald-500 rounded-3xl text-sm font-semibold">ADD TO LEDGER</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add Test Modal -->
+    <div id="test-modal" onclick="if (event.target.id === 'test-modal') hideModals()" class="hidden fixed inset-0 bg-black/70 flex items-center justify-center z-[100]">
+        <div onclick="event.stopImmediatePropagation()" class="bg-zinc-900 border border-zinc-700 rounded-3xl w-full max-w-lg p-7">
+            <h3 class="font-semibold text-xl mb-5">Log New Test Result</h3>
+            
+            <div class="grid grid-cols-2 gap-4">
+                <div class="col-span-2">
+                    <label class="text-xs text-zinc-400">Sample Date &amp; Location</label>
+                    <input id="test-date" type="datetime-local" value="2026-05-10T14:30" class="w-full mt-1 bg-zinc-950 border border-zinc-700 rounded-2xl px-4 py-3 text-sm">
+                </div>
+                <div>
+                    <label class="text-xs text-zinc-400">Sample Type</label>
+                    <select id="test-type" class="w-full mt-1 bg-zinc-950 border border-zinc-700 rounded-2xl px-4 py-3 text-sm">
+                        <option>Rainwater</option>
+                        <option>Soil</option>
+                        <option>Air Filter</option>
+                        <option>Vegetation</option>
+                        <option>Water (Surface)</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="text-xs text-zinc-400">Lab / Source</label>
+                    <input id="test-lab" type="text" value="Independent Environmental Lab" class="w-full mt-1 bg-zinc-950 border border-zinc-700 rounded-2xl px-4 py-3 text-sm">
+                </div>
+                
+                <div class="col-span-2">
+                    <label class="text-xs text-zinc-400">Contaminant Levels (ppb or μg/m³)</label>
+                    <div class="grid grid-cols-3 gap-3 mt-1">
+                        <div>
+                            <div class="text-xs">Aluminum</div>
+                            <input id="test-al" type="text" value="487" class="w-full bg-zinc-950 border border-zinc-700 rounded-xl px-3 py-2 text-sm">
+                        </div>
+                        <div>
+                            <div class="text-xs">Barium</div>
+                            <input id="test-ba" type="text" value="92" class="w-full bg-zinc-950 border border-zinc-700 rounded-xl px-3 py-2 text-sm">
+                        </div>
+                        <div>
+                            <div class="text-xs">Strontium</div>
+                            <input id="test-sr" type="text" value="64" class="w-full bg-zinc-950 border border-zinc-700 rounded-xl px-3 py-2 text-sm">
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="col-span-2">
+                    <label class="text-xs text-zinc-400">Notes / Observations</label>
+                    <textarea id="test-notes" class="w-full mt-1 bg-zinc-950 border border-zinc-700 rounded-2xl px-4 py-3 text-sm" rows="2">Elevated metals consistent with aerosol dispersion patterns observed same day.</textarea>
+                </div>
+            </div>
+            
+            <div class="flex gap-x-3 mt-6">
+                <button onclick="hideModals()" class="flex-1 py-3 border border-zinc-700 rounded-3xl text-sm">CANCEL</button>
+                <button onclick="addTestResult()" class="flex-1 py-3 bg-emerald-600 hover:bg-emerald-500 rounded-3xl text-sm font-semibold">LOG TEST RESULT</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Tailwind script
+        function initializeTailwind() {
+            document.documentElement.style.setProperty('--accent', '#10b981');
+        }
+
+        // Global data stores
+        let records = [];
+        let companies = [];
+        let tests = [];
+        let flights = [];
+        let currentPhotos = [];
+        let skyMap = null;
+        let sunlightChart = null;
+        let mapMarkers = [];
+        let planeMarkers = [];
+
+        // Load from localStorage
+        function loadData() {
+            const savedRecords = localStorage.getItem('georecords');
+            if (savedRecords) records = JSON.parse(savedRecords);
+            
+            const savedCompanies = localStorage.getItem('geocompanies');
+            if (savedCompanies) companies = JSON.parse(savedCompanies);
+            else {
+                // Seed initial companies
+                companies = [
+                    { id: 1, name: "Weather Modification Inc.", type: "Cloud Seeding", contracted_by: "Texas Dept. of Agriculture / Private clients", regions: "Texas, Oklahoma, Kansas", status: "Active", notes: "Publicly documented cloud seeding since 1960s" },
+                    { id: 2, name: "Seeding Operations & Atmospheric Research (SOAR)", type: "Cloud Seeding", contracted_by: "State programs (ND, SD, CO)", regions: "Northern Plains", status: "Active", notes: "Operates aircraft for hail suppression & rain enhancement" },
+                    { id: 3, name: "Atmospherics Incorporated", type: "Weather Modification", contracted_by: "California Dept. of Water Resources", regions: "Sierra Nevada", status: "Active", notes: "Long-running snowpack augmentation program" },
+                    { id: 4, name: "North American Weather Consultants", type: "Cloud Seeding", contracted_by: "Multiple Western states", regions: "Utah, Nevada, Idaho", status: "Active", notes: "Provides equipment and operations for state programs" },
+                    { id: 5, name: "AeroVironment Inc.", type: "Drone-based Delivery", contracted_by: "Defense contractors / DARPA programs", regions: "Classified / Test ranges", status: "Suspected", notes: "High-altitude drone platforms capable of aerosol dispersal" },
+                    { id: 6, name: "Stratospheric Aerosol Geoengineering LLC (fictional placeholder)", type: "Stratospheric Aerosol Injection", contracted_by: "Private / International consortia", regions: "Global flight corridors", status: "Alleged", notes: "User-added for tracking purposes" },
+                    { id: 7, name: "Raytheon Technologies (Weather Systems)", type: "Military Contractor", contracted_by: "U.S. Air Force / NOAA", regions: "National", status: "Active", notes: "Provides radar, modeling, and modification systems" },
+                    { id: 8, name: "DynCorp International", type: "Aerial Operations", contracted_by: "U.S. Government", regions: "Various", status: "Active", notes: "Large-scale aerial service contractor" }
+                ];
+                localStorage.setItem('geocompanies', JSON.stringify(companies));
+            }
+
+            const savedTests = localStorage.getItem('geotests');
+            if (savedTests) tests = JSON.parse(savedTests);
+            else {
+                tests = [
+                    { id: 1, date: "2026-05-09", location: "Everglades, FL", sample: "Rainwater", al: "412", ba: "78", sr: "51", lab: "Southeast Environmental Lab", notes: "Sample collected during heavy aerosol activity" },
+                    { id: 2, date: "2026-05-05", location: "Miami Beach, FL", sample: "Air Filter (PM2.5)", al: "890", ba: "134", sr: "97", lab: "University of Miami", notes: "Spike correlates with grid pattern over city" },
+                    { id: 3, date: "2026-04-28", location: "Naples, FL", sample: "Soil (top 5cm)", al: "12400", ba: "320", sr: "185", lab: "Florida Dept. of Agriculture", notes: "Elevated aluminum consistent with repeated deposition" }
+                ];
+                localStorage.setItem('geotests', JSON.stringify(tests));
+            }
+
+            const savedFlights = localStorage.getItem('geoflights');
+            if (savedFlights) flights = JSON.parse(savedFlights);
+            else {
+                flights = [
+                    { id: 1, callsign: "N472SA", type: "Gulfstream G650", route: "MIA → 27.8N 81.4W loiter", altitude: "41000", time: "2026-05-11 14:22", activity: "Suspected Spray", status: "Tracked" },
+                    { id: 2, callsign: "DAL1847", type: "Boeing 737-900", route: "ATL → FLL", altitude: "32000", time: "2026-05-11 15:41", activity: "Normal Contrail", status: "Normal" },
+                    { id: 3, callsign: "XJET992", type: "Cessna Citation X", route: "Grid pattern over Everglades", altitude: "38000", time: "2026-05-11 16:05", activity: "Suspected Spray", status: "Tracked" },
+                    { id: 4, callsign: "N919GS", type: "Global 6000", route: "Multiple parallel passes", altitude: "43000", time: "2026-05-11 17:19", activity: "Suspected Spray", status: "Tracked" }
+                ];
+                localStorage.setItem('geoflights', JSON.stringify(flights));
+            }
+
+            // Seed sample records if none
+            if (records.length === 0) {
+                records = [
+                    {
+                        id: 1,
+                        date: "2026-05-11",
+                        location: "Everglades National Park, FL",
+                        lat: 25.76,
+                        lon: -80.68,
+                        sunlight: { observed: 9.8, expected: 13.4, deviation: -27 },
+                        towers: { signal: -82, count: 47, bands: ["5G mmWave", "LTE Band 66"] },
+                        microwave: { level: 4.7, zone: "Everglades West — Active 14:00-22:00" },
+                        sky: { contrail_pct: 61, spray_planes: 12, notes: "Straight fire line observed at 16:42. Persistent grid patterns. Strong chemical odor reported by rangers. 3 high-altitude aircraft loitering in formation." },
+                        photos: [],
+                        event: "Straight-line wildfire"
+                    },
+                    {
+                        id: 2,
+                        date: "2026-05-10",
+                        location: "Miami, FL",
+                        lat: 25.76,
+                        lon: -80.19,
+                        sunlight: { observed: 10.2, expected: 13.3, deviation: -23 },
+                        towers: { signal: -79, count: 62, bands: ["5G mmWave"] },
+                        microwave: { level: 3.1, zone: "Urban core elevated" },
+                        sky: { contrail_pct: 48, spray_planes: 7, notes: "Heavy grid formation over Biscayne Bay. Multiple persistent contrails spreading into cirrus." },
+                        photos: [],
+                        event: null
+                    }
+                ];
+                localStorage.setItem('georecords', JSON.stringify(records));
+            }
+        }
+
+        // Save data
+        function saveData() {
+            localStorage.setItem('georecords', JSON.stringify(records));
+            localStorage.setItem('geocompanies', JSON.stringify(companies));
+            localStorage.setItem('geotests', JSON.stringify(tests));
+            localStorage.setItem('geoflights', JSON.stringify(flights));
+        }
+
+        // Show section
+        function showSection(section) {
+            // Hide all sections
+            document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+            
+            // Show target
+            const target = document.getElementById('section-' + section);
+            if (target) target.classList.add('active');
+            
+            // Update nav active state
+            document.querySelectorAll('[id^="nav-"]').forEach(nav => nav.classList.remove('active'));
+            const navEl = document.getElementById('nav-' + section);
+            if (navEl) navEl.classList.add('active');
+
+            // Special inits
+            if (section === 'sky-monitor' && !skyMap) {
+                setTimeout(initSkyMap, 300);
+            }
+            if (section === 'records') {
+                renderRecordsTable();
+            }
+            if (section === 'companies') {
+                renderCompaniesTable();
+            }
+            if (section === 'tests') {
+                renderTestsTable();
+            }
+            if (section === 'flights') {
+                renderFlightsList();
+            }
+            if (section === 'signals') {
+                renderTowerList();
+            }
+        }
+
+        // Update dashboard metrics
+        function updateDashboard() {
+            const today = records.find(r => r.date === "2026-05-11") || records[0];
+            if (!today) return;
+
+            // Sunlight
+            document.getElementById('dash-sunlight').innerHTML = today.sunlight.observed;
+            
+            // Tower
+            document.getElementById('dash-tower').innerHTML = today.towers.signal;
+            
+            // Microwave
+            document.getElementById('dash-microwave').innerHTML = today.microwave.level;
+            
+            // Sky
+            document.getElementById('dash-sky').innerHTML = today.sky.contrail_pct;
+
+            // Update last sync
+            document.getElementById('last-sync').innerHTML = new Date().toLocaleString('en-US', { 
+                year: 'numeric', month: '2-digit', day: '2-digit', 
+                hour: '2-digit', minute: '2-digit' 
+            }).replace(',', '');
+
+            // Render sunlight mini chart
+            renderSunlightChart();
+        }
+
+        function renderSunlightChart() {
+            const ctx = document.getElementById('sunlight-chart');
+            if (!ctx) return;
+
+            if (sunlightChart) sunlightChart.destroy();
+
+            const labels = ['Mar 12', 'Mar 19', 'Mar 26', 'Apr 2', 'Apr 9', 'Apr 16', 'Apr 23', 'Apr 30', 'May 7', 'May 11'];
+            const observed = [11.2, 10.8, 12.1, 9.4, 11.9, 8.7, 10.3, 9.1, 10.5, 9.8];
+            const expected = [11.8, 12.0, 12.3, 12.5, 12.7, 12.9, 13.1, 13.2, 13.3, 13.4];
+
+            sunlightChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Observed',
+                        data: observed,
+                        borderColor: '#f59e0b',
+                        borderWidth: 2.5,
+                        tension: 0.4,
+                        fill: false,
+                        pointRadius: 0
+                    }, {
+                        label: 'Expected',
+                        data: expected,
+                        borderColor: '#64748b',
+                        borderWidth: 1.5,
+                        borderDash: [3, 2],
+                        tension: 0.4,
+                        fill: false,
+                        pointRadius: 0
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        x: { grid: { color: '#27251f' }, ticks: { color: '#52525b', font: { size: 9 } } },
+                        y: { grid: { color: '#27251f' }, ticks: { color: '#52525b', font: { size: 9 }, stepSize: 2 } }
+                    },
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: { mode: 'index', intersect: false }
+                    },
+                    elements: { line: { borderJoinStyle: 'round' } }
+                }
+            });
+        }
+
+        // Mainstream daily data (simulates fetching live data)
+        function mainstreamDailyData() {
+            const today = new Date().toISOString().split('T')[0];
+            let existing = records.findIndex(r => r.date === today);
+            
+            const newData = {
+                id: Date.now(),
+                date: today,
+                location: document.getElementById('current-location').innerText,
+                lat: 25.76,
+                lon: -80.68,
+                sunlight: { 
+                    observed: (9.5 + Math.random() * 1.5).toFixed(1), 
+                    expected: 13.4, 
+                    deviation: Math.round(-22 - Math.random() * 8) 
+                },
+                towers: { 
+                    signal: Math.round(-75 - Math.random() * 12), 
+                    count: Math.round(42 + Math.random() * 18), 
+                    bands: ["5G mmWave", "LTE Band 66", "CBRS"] 
+                },
+                microwave: { 
+                    level: (3.8 + Math.random() * 1.9).toFixed(1), 
+                    zone: "Everglades West — Peak activity window" 
+                },
+                sky: { 
+                    contrail_pct: Math.round(48 + Math.random() * 25), 
+                    spray_planes: Math.round(8 + Math.random() * 7), 
+                    notes: "Daily mainstream sync. Grid patterns visible. Multiple high-altitude aircraft tracked performing parallel passes. Chemical taste reported in air." 
+                },
+                photos: [],
+                event: null
+            };
+
+            if (existing >= 0) {
+                records[existing] = newData;
+            } else {
+                records.unshift(newData);
+            }
+
+            saveData();
+            updateDashboard();
+            
+            // Toast
+            showToast("Today's data mainstreamed and archived successfully. Ready for legal export.", "success");
+            
+            // Auto switch to dashboard
+            setTimeout(() => showSection('dashboard'), 800);
+        }
+
+        function showToast(message, type = "success") {
+            const toast = document.createElement('div');
+            toast.className = `fixed bottom-6 right-6 px-6 py-4 rounded-3xl shadow-2xl flex items-center gap-x-3 text-sm z-[200] ${type === 'success' ? 'bg-emerald-600' : 'bg-red-600'}`;
+            toast.innerHTML = `
+                <i class="fa-solid ${type === 'success' ? 'fa-check-circle' : 'fa-exclamation-circle'}"></i>
+                <span>${message}</span>
+            `;
+            document.body.appendChild(toast);
+            
+            setTimeout(() => {
+                toast.style.transition = 'all 0.3s ease';
+                toast.style.opacity = '0';
+                toast.style.transform = 'translateY(20px)';
+                setTimeout(() => toast.remove(), 300);
+            }, 2800);
+        }
+
+        // Save daily log
+        function saveDailyLog(e) {
+            e.preventDefault();
+            
+            const formData = {
+                id: Date.now(),
+                date: document.getElementById('log-date').value.split('T')[0],
+                location: document.getElementById('log-location').value,
+                lat: 25.76,
+                lon: -80.68,
+                sunlight: {
+                    observed: parseFloat(document.getElementById('log-sun-observed').value),
+                    expected: parseFloat(document.getElementById('log-sun-expected').value),
+                    deviation: Math.round(((parseFloat(document.getElementById('log-sun-observed').value) / parseFloat(document.getElementById('log-sun-expected').value)) - 1) * 100)
+                },
+                towers: {
+                    signal: parseInt(document.getElementById('log-tower-signal').value),
+                    count: parseInt(document.getElementById('log-tower-count').value),
+                    bands: ["5G mmWave", "LTE Band 66"]
+                },
+                microwave: {
+                    level: parseFloat(document.getElementById('log-microwave').value),
+                    zone: document.getElementById('log-microwave-zone').value
+                },
+                sky: {
+                    contrail_pct: parseInt(document.getElementById('log-contrail').value),
+                    spray_planes: parseInt(document.getElementById('log-spray-planes').value),
+                    notes: document.getElementById('log-notes').value
+                },
+                photos: currentPhotos,
+                event: null
+            };
+
+            // Check if date exists
+            const existingIndex = records.findIndex(r => r.date === formData.date);
+            if (existingIndex >= 0) {
+                if (confirm("A record for this date already exists. Overwrite?")) {
+                    records[existingIndex] = formData;
+                } else {
+                    return;
+                }
+            } else {
+                records.unshift(formData);
+            }
+
+            saveData();
+            showToast("Entry saved to permanent archive. Searchable for legal & insurance use.");
+            clearDailyForm();
+            
+            // Refresh records if open
+            if (document.getElementById('section-records').classList.contains('active')) {
+                renderRecordsTable();
+            }
+            
+            updateDashboard();
+        }
+
+        function updateContrailValue(val) {
+            document.getElementById('contrail-value').innerText = val + '%';
+        }
+
+        function handlePhotoUpload(e) {
+            const files = e.target.files;
+            const previewContainer = document.getElementById('photo-previews');
+            
+            Array.from(files).forEach(file => {
+                if (!file.type.startsWith('image/')) return;
+                
+                const reader = new FileReader();
+                reader.onload = function(ev) {
+                    currentPhotos.push(ev.target.result);
+                    
+                    const thumb = document.createElement('div');
+                    thumb.className = 'relative w-16 h-16 rounded-2xl overflow-hidden border border-zinc-600';
+                    thumb.innerHTML = `
+                        <img src="${ev.target.result}" class="w-full h-full object-cover">
+                        <button onclick="removePhoto(this, '${ev.target.result}')" class="absolute -top-1 -right-1 bg-red-500 text-white w-4 h-4 rounded-full flex items-center justify-center text-xs">×</button>
+                    `;
+                    previewContainer.appendChild(thumb);
+                };
+                reader.readAsDataURL(file);
+            });
+        }
+
+        function removePhoto(element, dataUrl) {
+            currentPhotos = currentPhotos.filter(p => p !== dataUrl);
+            element.parentElement.remove();
+        }
+
+        function clearDailyForm() {
+            document.getElementById('daily-form').reset();
+            document.getElementById('photo-previews').innerHTML = '';
+            currentPhotos = [];
+            document.getElementById('contrail-value').innerText = '61%';
+        }
+
+        function useGeolocationForLog() {
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(pos => {
+                    document.getElementById('log-location').value = `User Location (${pos.coords.latitude.toFixed(2)}°N, ${pos.coords.longitude.toFixed(2)}°W)`;
+                });
+            } else {
+                alert("Geolocation not supported");
+            }
+        }
+
+        // Sky Map
+        function initSkyMap() {
+            const mapContainer = document.getElementById('sky-map');
+            if (!mapContainer) return;
+
+            skyMap = L.map('sky-map', {
+                zoomControl: false,
+                attributionControl: false
+            }).setView([25.76, -80.68], 9);
+
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                className: 'map-tiles'
+            }).addTo(skyMap);
+
+            // Add towers
+            const towers = [
+                { lat: 25.82, lon: -80.55, signal: -78, id: "TWR-4471" },
+                { lat: 25.61, lon: -80.72, signal: -91, id: "TWR-3922" },
+                { lat: 25.91, lon: -80.41, signal: -69, id: "TWR-5103" },
+                { lat: 25.54, lon: -80.89, signal: -84, id: "TWR-2884" }
+            ];
+
+            towers.forEach(t => {
+                const marker = L.marker([t.lat, t.lon], {
+                    icon: L.divIcon({
+                        className: 'tower-marker',
+                        html: `<div style="background:#ef4444; width:14px; height:14px; border-radius:50%; border:2px solid white; box-shadow:0 0 12px #ef4444"></div>`,
+                        iconSize: [18, 18],
+                        iconAnchor: [9, 9]
+                    })
+                }).addTo(skyMap);
+                
+                marker.bindPopup(`<b>${t.id}</b><br>Signal: ${t.signal} dBm<br>5G Active<br><span class="text-red-400">High priority zone</span>`);
+                mapMarkers.push(marker);
+            });
+
+            // Microwave zones (circles)
+            const zones = [
+                { lat: 25.71, lon: -80.75, radius: 8500, level: 4.7, color: '#ef4444' },
+                { lat: 25.88, lon: -80.52, radius: 6200, level: 3.2, color: '#f59e0b' }
+            ];
+
+            zones.forEach(z => {
+                L.circle([z.lat, z.lon], {
+                    color: z.color,
+                    fillColor: z.color,
+                    fillOpacity: 0.15,
+                    radius: z.radius,
+                    weight: 1.5
+                }).addTo(skyMap).bindPopup(`Microwave Zone<br>Peak: ${z.level} μW/cm²`);
+            });
+
+            // Flight paths
+            const paths = [
+                [[25.92, -81.05], [25.48, -80.31]],
+                [[25.65, -81.12], [25.82, -80.29]],
+                [[25.71, -80.95], [25.59, -80.42]]
+            ];
+
+            paths.forEach((path, i) => {
+                const poly = L.polyline(path, {
+                    color: i < 2 ? '#ef4444' : '#64748b',
+                    weight: 2.5,
+                    opacity: 0.75,
+                    dashArray: i < 2 ? '8, 6' : null
+                }).addTo(skyMap);
+                
+                // Plane marker
+                const planeIcon = L.divIcon({
+                    html: `<i class="fa-solid fa-plane text-sky-400 text-xl" style="transform: rotate(35deg)"></i>`,
+                    className: '',
+                    iconSize: [22, 22],
+                    iconAnchor: [11, 11]
+                });
+                
+                const plane = L.marker(path[0], { icon: planeIcon }).addTo(skyMap);
+                planeMarkers.push(plane);
+                
+                // Animate plane along path
+                let progress = 0;
+                setInterval(() => {
+                    progress = (progress + 0.012) % 1;
+                    const lat = path[0][0] + (path[1][0] - path[0][0]) * progress;
+                    const lon = path[0][1] + (path[1][1] - path[0][1]) * progress;
+                    plane.setLatLng([lat, lon]);
+                }, 1200);
+            });
+
+            // Add legend
+            const legend = L.control({ position: 'bottomright' });
+            legend.onAdd = function() {
+                const div = L.DomUtil.create('div', 'bg-zinc-900/90 px-3 py-2 rounded-2xl text-xs border border-zinc-700');
+                div.innerHTML = `
+                    <div class="flex items-center gap-x-2 mb-1"><span class="inline-block w-3 h-px bg-red-500"></span> Suspected spray path</div>
+                    <div class="flex items-center gap-x-2"><span class="inline-block w-3 h-px bg-slate-400"></span> Normal flight</div>
+                `;
+                return div;
+            };
+            legend.addTo(skyMap);
+        }
+
+        function scanSkies() {
+            if (!skyMap) return;
+            
+            const center = skyMap.getCenter();
+            
+            // Add random new plane
+            const newLat = center.lat + (Math.random() - 0.5) * 0.4;
+            const newLon = center.lng + (Math.random() - 0.5) * 0.6;
+            
+            const planeIcon = L.divIcon({
+                html: `<i class="fa-solid fa-plane text-red-400 text-xl" style="transform: rotate(${Math.random()*80 - 30}deg)"></i>`,
+                className: '',
+                iconSize: [24, 24],
+                iconAnchor: [12, 12]
+            });
+            
+            const newPlane = L.marker([newLat, newLon], { icon: planeIcon }).addTo(skyMap);
+            planeMarkers.push(newPlane);
+            
+            newPlane.bindPopup(`<b>NEW TRACKED AIRCRAFT</b><br>Callsign: N${Math.floor(Math.random()*9000)+1000}GS<br>Altitude: 39,000 ft<br><span class="text-red-400">Pattern: Parallel passes • Suspected aerosol</span>`);
+            
+            // Update live numbers
+            document.getElementById('live-planes').innerText = parseInt(document.getElementById('live-planes').innerText) + 1;
+            document.getElementById('live-spray').innerText = parseInt(document.getElementById('live-spray').innerText) + 1;
+            
+            showToast("New flight path detected and logged to archive.");
+            
+            // Add to flights list if on flights section
+            if (document.getElementById('section-flights').classList.contains('active')) {
+                addSimulatedFlight(true);
+            }
+        }
+
+        function renderTowerList() {
+            const container = document.getElementById('tower-list');
+            container.innerHTML = '';
+            
+            const towers = [
+                { id: "TWR-4471", signal: -78, dist: "4.2 mi", status: "5G Active" },
+                { id: "TWR-3922", signal: -91, dist: "11.8 mi", status: "LTE + 5G" },
+                { id: "TWR-5103", signal: -69, dist: "2.1 mi", status: "mmWave" },
+                { id: "TWR-2884", signal: -84, dist: "7.6 mi", status: "LTE" }
+            ];
+            
+            towers.forEach(t => {
+                const el = document.createElement('div');
+                el.className = `flex justify-between items-center p-3.5 rounded-2xl ${t.signal < -85 ? 'bg-red-900/20 border border-red-900/40' : 'bg-zinc-950'}`;
+                el.innerHTML = `
+                    <div>
+                        <div class="font-mono text-sm">${t.id}</div>
+                        <div class="text-xs text-zinc-400">${t.dist} • ${t.status}</div>
+                    </div>
+                    <div class="text-right">
+                        <div class="font-mono text-lg font-semibold ${t.signal < -85 ? 'text-red-400' : 'text-emerald-400'}">${t.signal}</div>
+                        <div class="text-xs text-zinc-400">dBm</div>
+                    </div>
+                `;
+                container.appendChild(el);
+            });
+        }
+
+        // Render records table
+        function renderRecordsTable(filteredRecords = null) {
+            const tbody = document.getElementById('records-table-body');
+            tbody.innerHTML = '';
+            
+            const data = filteredRecords || records;
+            
+            if (data.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="6" class="px-6 py-8 text-center text-zinc-500">No records found. Start logging daily data.</td></tr>`;
+                return;
+            }
+            
+            data.forEach(record => {
+                const row = document.createElement('tr');
+                row.className = 'log-entry hover:bg-zinc-800 cursor-pointer';
+                row.innerHTML = `
+                    <td class="px-6 py-4 font-mono text-xs">${record.date}</td>
+                    <td class="px-6 py-4">${record.location}</td>
+                    <td class="px-6 py-4">
+                        <span class="font-semibold">${record.sunlight.observed}h</span>
+                        <span class="text-xs text-red-400 ml-1">(${record.sunlight.deviation}%)</span>
+                    </td>
+                    <td class="px-6 py-4 font-mono">${record.microwave.level} μW/cm²</td>
+                    <td class="px-6 py-4">${record.sky.contrail_pct}% <span class="text-xs text-zinc-500">(${record.sky.spray_planes} planes)</span></td>
+                    <td class="px-6 py-4">
+                        <div class="flex gap-x-2">
+                            <button onclick="viewRecordDetail(${record.id}); event.stopImmediatePropagation();" class="px-3 py-1 text-xs border border-zinc-600 rounded-2xl hover:bg-zinc-700">VIEW</button>
+                            <button onclick="deleteRecord(${record.id}); event.stopImmediatePropagation();" class="px-3 py-1 text-xs text-red-400 border border-red-900/50 rounded-2xl hover:bg-red-900/20">DEL</button>
+                        </div>
+                    </td>
+                `;
+                row.onclick = () => viewRecordDetail(record.id);
+                tbody.appendChild(row);
+            });
+        }
+
+        function filterRecords() {
+            const search = document.getElementById('search-input').value.toLowerCase();
+            const dateFilter = document.getElementById('filter-date').value;
+            
+            let filtered = records;
+            
+            if (search) {
+                filtered = filtered.filter(r => 
+                    (r.location && r.location.toLowerCase().includes(search)) || 
+                    (r.sky.notes && r.sky.notes.toLowerCase().includes(search)) ||
+                    (r.event && r.event.toLowerCase().includes(search))
+                );
+            }
+            
+            if (dateFilter) {
+                filtered = filtered.filter(r => r.date.startsWith(dateFilter));
+            }
+            
+            renderRecordsTable(filtered);
+        }
+
+        function viewRecordDetail(id) {
+            const record = records.find(r => r.id === id);
+            if (!record) return;
+            
+            const modal = document.createElement('div');
+            modal.className = 'fixed inset-0 bg-black/80 flex items-center justify-center z-[100] p-6';
+            modal.innerHTML = `
+                <div onclick="event.target.remove()" class="absolute inset-0"></div>
+                <div onclick="event.stopImmediatePropagation()" class="bg-zinc-900 border border-zinc-700 rounded-3xl max-w-3xl w-full max-h-[92vh] overflow-auto relative">
+                    <div class="sticky top-0 bg-zinc-900 border-b border-zinc-700 px-8 py-5 flex justify-between items-center z-10">
+                        <div>
+                            <div class="font-display text-2xl">${record.date}</div>
+                            <div class="text-emerald-400 text-sm">${record.location}</div>
+                        </div>
+                        <div class="flex items-center gap-x-3">
+                            <button onclick="downloadRecordPDF(${id}); this.closest('.fixed').remove()" class="px-5 py-2 text-xs flex items-center gap-x-2 border border-emerald-600 text-emerald-400 rounded-3xl hover:bg-emerald-900/30">
+                                <i class="fa-solid fa-file-pdf"></i> <span>DOWNLOAD PDF</span>
+                            </button>
+                            <button onclick="this.closest('.fixed').remove()" class="text-zinc-400 hover:text-white px-4"><i class="fa-solid fa-times text-xl"></i></button>
+                        </div>
+                    </div>
+                    
+                    <div class="p-8 grid grid-cols-1 md:grid-cols-2 gap-8">
+                        <div>
+                            <div class="uppercase tracking-widest text-xs text-zinc-400 mb-3">SUNLIGHT</div>
+                            <div class="flex items-baseline gap-x-2">
+                                <span class="text-6xl font-semibold">${record.sunlight.observed}</span>
+                                <span class="text-xl text-zinc-400">/ ${record.sunlight.expected}h</span>
+                            </div>
+                            <div class="text-red-400 text-sm font-medium mt-1">${record.sunlight.deviation}% deviation from expected</div>
+                            
+                            <div class="mt-7">
+                                <div class="uppercase tracking-widest text-xs text-zinc-400 mb-2">TOWER SIGNALS</div>
+                                <div class="text-4xl font-mono">${record.towers.signal} <span class="text-base text-zinc-400">dBm</span></div>
+                                <div class="text-xs text-zinc-400">${record.towers.count} towers • ${record.towers.bands.join(', ')}</div>
+                            </div>
+                            
+                            <div class="mt-7">
+                                <div class="uppercase tracking-widest text-xs text-zinc-400 mb-2">MICROWAVE</div>
+                                <div class="text-4xl font-mono">${record.microwave.level} <span class="text-base text-zinc-400">μW/cm²</span></div>
+                                <div class="text-xs text-zinc-400">${record.microwave.zone}</div>
+                            </div>
+                        </div>
+                        
+                        <div>
+                            <div class="uppercase tracking-widest text-xs text-zinc-400 mb-3">SKY CONDITIONS</div>
+                            <div class="text-5xl font-semibold">${record.sky.contrail_pct}<span class="text-3xl text-zinc-400">%</span></div>
+                            <div class="text-xs text-sky-400 mt-1">${record.sky.spray_planes} suspected spray aircraft observed</div>
+                            
+                            <div class="mt-6 bg-zinc-950 p-4 rounded-2xl text-sm border border-zinc-800">
+                                <div class="font-medium text-xs text-zinc-300 mb-1">NOTES &amp; OBSERVATIONS</div>
+                                <div class="text-zinc-300 leading-snug">${record.sky.notes}</div>
+                            </div>
+                            
+                            ${record.event ? `<div class="mt-4 px-4 py-3 bg-red-900/30 border border-red-700 rounded-2xl text-xs text-red-300">EVENT: ${record.event}</div>` : ''}
+                            
+                            ${record.photos && record.photos.length > 0 ? `
+                                <div class="mt-5">
+                                    <div class="text-xs text-zinc-400 mb-2">ATTACHED EVIDENCE (${record.photos.length})</div>
+                                    <div class="flex gap-2 flex-wrap">
+                                        ${record.photos.map((p, i) => `<img src="${p}" class="w-16 h-16 object-cover rounded-2xl border border-zinc-700 cursor-pointer" onclick="window.open('${p}', '_blank')">`).join('')}
+                                    </div>
+                                </div>
+                            ` : ''}
+                        </div>
+                    </div>
+                    
+                    <div class="px-8 py-4 border-t border-zinc-700 flex justify-end text-xs text-zinc-500">
+                        Chain-of-custody timestamp: ${new Date(record.id).toLocaleString()} • GeoRecord v2.1
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(modal);
+        }
+
+        function deleteRecord(id) {
+            if (!confirm("Delete this record permanently?")) return;
+            records = records.filter(r => r.id !== id);
+            saveData();
+            renderRecordsTable();
+            showToast("Record deleted.");
+        }
+
+        function exportAllRecords() {
+            const csv = [
+                "Date,Location,Sunlight Observed,Expected,Deviation %,Microwave μW/cm²,Contrail %,Spray Planes,Notes"
+            ];
+            
+            records.forEach(r => {
+                csv.push([
+                    r.date,
+                    `"${r.location}"`,
+                    r.sunlight.observed,
+                    r.sunlight.expected,
+                    r.sunlight.deviation,
+                    r.microwave.level,
+                    r.sky.contrail_pct,
+                    r.sky.spray_planes,
+                    `"${(r.sky.notes || '').replace(/"/g, '""')}"`
+                ].join(','));
+            });
+            
+            const blob = new Blob([csv.join('\n')], { type: 'text/csv' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `GeoRecord_Archive_${new Date().toISOString().split('T')[0]}.csv`;
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+
+        // Companies
+        function renderCompaniesTable() {
+            const tbody = document.getElementById('companies-table');
+            tbody.innerHTML = '';
+            
+            companies.forEach((c, index) => {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td class="px-6 py-4 font-medium">${c.name}</td>
+                    <td class="px-6 py-4 text-xs text-emerald-400">${c.type}</td>
+                    <td class="px-6 py-4 text-xs">${c.contracted_by}</td>
+                    <td class="px-6 py-4 text-xs">${c.regions}</td>
+                    <td class="px-6 py-4"><span class="px-3 py-px text-xs rounded-2xl ${c.status === 'Active' ? 'bg-emerald-900/70 text-emerald-300' : 'bg-orange-900/60 text-orange-300'}">${c.status}</span></td>
+                    <td class="px-6 py-4 text-right">
+                        <button onclick="deleteCompany(${index}); event.stopImmediatePropagation()" class="text-red-400 hover:text-red-300 px-2"><i class="fa-solid fa-trash text-xs"></i></button>
+                    </td>
+                `;
+                tbody.appendChild(row);
+            });
+        }
+
+        function showAddCompanyModal() {
+            document.getElementById('company-modal').classList.remove('hidden');
+            document.getElementById('company-modal').classList.add('flex');
+        }
+
+        function addCompany() {
+            const newCompany = {
+                id: Date.now(),
+                name: document.getElementById('company-name').value || "Unnamed Contractor",
+                type: document.getElementById('company-type').value,
+                contracted_by: document.getElementById('company-contractor').value,
+                regions: document.getElementById('company-regions').value,
+                status: "Active",
+                notes: "User added for transparency tracking"
+            };
+            
+            companies.unshift(newCompany);
+            saveData();
+            hideModals();
+            renderCompaniesTable();
+            showToast("Contractor added to ledger.");
+        }
+
+        function deleteCompany(index) {
+            if (!confirm("Remove this contractor from the list?")) return;
+            companies.splice(index, 1);
+            saveData();
+            renderCompaniesTable();
+        }
+
+        // Tests
+        function renderTestsTable() {
+            const tbody = document.getElementById('tests-table-body');
+            tbody.innerHTML = '';
+            
+            tests.forEach(t => {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td class="px-6 py-4 font-mono text-xs">${t.date}</td>
+                    <td class="px-6 py-4">
+                        <div>${t.location}</div>
+                        <div class="text-xs text-zinc-400">${t.sample}</div>
+                    </td>
+                    <td class="px-6 py-4 text-xs">
+                        Al: ${t.al} ppb<br>
+                        Ba: ${t.ba} ppb<br>
+                        Sr: ${t.sr} ppb
+                    </td>
+                    <td class="px-6 py-4">
+                        <span class="text-red-400 text-xs font-medium">ELEVATED</span>
+                    </td>
+                    <td class="px-6 py-4 text-xs">${t.lab}</td>
+                    <td class="px-6 py-4 text-right">
+                        <button onclick="deleteTest(${t.id}); event.stopImmediatePropagation()" class="text-red-400 px-2"><i class="fa-solid fa-trash text-xs"></i></button>
+                    </td>
+                `;
+                tbody.appendChild(row);
+            });
+        }
+
+        function showAddTestModal() {
+            document.getElementById('test-modal').classList.remove('hidden');
+            document.getElementById('test-modal').classList.add('flex');
+        }
+
+        function addTestResult() {
+            const newTest = {
+                id: Date.now(),
+                date: document.getElementById('test-date').value.split('T')[0],
+                location: "User Location (Everglades area)",
+                sample: document.getElementById('test-type').value,
+                al: document.getElementById('test-al').value,
+                ba: document.getElementById('test-ba').value,
+                sr: document.getElementById('test-sr').value,
+                lab: document.getElementById('test-lab').value,
+                notes: document.getElementById('test-notes').value
+            };
+            
+            tests.unshift(newTest);
+            saveData();
+            hideModals();
+            renderTestsTable();
+            showToast("Test result logged to archive.");
+        }
+
+        function deleteTest(id) {
+            if (!confirm("Delete this test record?")) return;
+            tests = tests.filter(t => t.id !== id);
+            saveData();
+            renderTestsTable();
+        }
+
+        // Flights
+        function renderFlightsList() {
+            const container = document.getElementById('flights-list');
+            container.innerHTML = '';
+            
+            flights.forEach(f => {
+                const div = document.createElement('div');
+                div.className = `p-4 mb-3 rounded-2xl border ${f.activity.includes('Suspected') ? 'border-red-900/60 bg-red-950/30' : 'border-zinc-700 bg-zinc-950'}`;
+                div.innerHTML = `
+                    <div class="flex justify-between">
+                        <div>
+                            <div class="font-mono text-sm">${f.callsign}</div>
+                            <div class="text-xs text-zinc-400">${f.type} • ${f.altitude} ft</div>
+                        </div>
+                        <div class="text-right">
+                            <div class="text-xs ${f.activity.includes('Suspected') ? 'text-red-400' : 'text-emerald-400'}">${f.activity}</div>
+                            <div class="font-mono text-xs text-zinc-400">${f.time}</div>
+                        </div>
+                    </div>
+                    <div class="mt-2 text-xs text-zinc-300">${f.route}</div>
+                `;
+                container.appendChild(div);
+            });
+        }
+
+        function addSimulatedFlight(silent = false) {
+            const newFlight = {
+                id: Date.now(),
+                callsign: "N" + Math.floor(1000 + Math.random() * 9000) + "GS",
+                type: ["Gulfstream G650", "Global 7500", "Cessna Citation Longitude"][Math.floor(Math.random()*3)],
+                route: "Parallel grid pattern over Everglades",
+                altitude: (38000 + Math.floor(Math.random()*6000)).toString(),
+                time: "2026-05-11 " + (14 + Math.floor(Math.random()*6)) + ":" + String(Math.floor(Math.random()*60)).padStart(2, '0'),
+                activity: Math.random() > 0.4 ? "Suspected Spray" : "Normal Contrail",
+                status: "Tracked"
+            };
+            
+            flights.unshift(newFlight);
+            saveData();
+            
+            if (!silent) {
+                renderFlightsList();
+                showToast("Flight added to tracker.");
+            }
+            
+            // If map is open, add visual
+            if (skyMap && document.getElementById('section-sky-monitor').classList.contains('active')) {
+                const center = skyMap.getCenter();
+                const planeIcon = L.divIcon({
+                    html: `<i class="fa-solid fa-plane text-red-400 text-xl" style="transform: rotate(45deg)"></i>`,
+                    className: '',
+                    iconSize: [24, 24]
+                });
+                const m = L.marker([center.lat + (Math.random()-0.5)*0.3, center.lng + (Math.random()-0.5)*0.5], { icon: planeIcon }).addTo(skyMap);
+                planeMarkers.push(m);
+                m.bindPopup(`<b>${newFlight.callsign}</b><br>${newFlight.activity}`);
+            }
+        }
+
+        // Reports
+        function generateFullReport() {
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF();
+            
+            doc.setFont("helvetica", "bold");
+            doc.setFontSize(22);
+            doc.text("GeoRecord SkyLedger", 20, 22);
+            doc.setFontSize(12);
+            doc.setFont("helvetica", "normal");
+            doc.text("Official Citizen Monitoring Report — May 2026", 20, 30);
+            doc.text("Prepared for: Ava Leigh Stewart | Date: " + new Date().toLocaleDateString(), 20, 38);
+            
+            doc.setDrawColor(16, 185, 129);
+            doc.line(20, 44, 190, 44);
+            
+            doc.setFontSize(11);
+            doc.text("SUMMARY OF OBSERVATIONS", 20, 55);
+            
+            let y = 65;
+            records.slice(0, 5).forEach((r, i) => {
+                doc.text(`${r.date} — ${r.location}`, 20, y);
+                doc.text(`Sunlight: ${r.sunlight.observed}h (${r.sunlight.deviation}%) | Microwave: ${r.microwave.level} μW/cm² | Contrails: ${r.sky.contrail_pct}%`, 25, y + 6);
+                y += 18;
+                if (y > 240) {
+                    doc.addPage();
+                    y = 30;
+                }
+            });
+            
+            doc.setFontSize(9);
+            doc.text("This document contains citizen-collected data for transparency and record-keeping purposes.", 20, 280);
+            doc.text("Not a substitute for official scientific or legal verification.", 20, 286);
+            
+            doc.save("GeoRecord_May2026_Full_Report.pdf");
+            showToast("Full report downloaded. Use for insurance & legal filings.");
+        }
+
+        function generateQuickReport() {
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF();
+            
+            const eventRecord = records[0];
+            
+            doc.setFont("helvetica", "bold");
+            doc.setFontSize(18);
+            doc.text("INCIDENT REPORT", 20, 20);
+            doc.setFontSize(11);
+            doc.text("Everglades Straight-Line Fire Event — May 11, 2026", 20, 28);
+            
+            doc.setFont("helvetica", "normal");
+            doc.text("Prepared by: Ava Leigh Stewart | GeoRecord Ledger", 20, 38);
+            doc.text("Timestamp: " + new Date().toLocaleString(), 20, 45);
+            
+            doc.line(20, 52, 190, 52);
+            
+            doc.setFontSize(10);
+            doc.text("CORRELATED DATA:", 20, 62);
+            doc.text("• Sunlight deviation: -27% (9.8h observed vs 13.4h expected)", 25, 72);
+            doc.text("• Microwave peak: 4.7 μW/cm² in active zone", 25, 80);
+            doc.text("• Tower signal average: -82 dBm (47 towers)", 25, 88);
+            doc.text("• Sky coverage: 61% contrail/aerosol", 25, 96);
+            doc.text("• Suspected spray flights: 12 tracked (3 in grid pattern)", 25, 104);
+            
+            doc.text("EVENT NOTES:", 20, 120);
+            doc.text(eventRecord.sky.notes || "Straight fire line observed. Chemical odor reported.", 25, 128, { maxWidth: 160 });
+            
+            doc.text("RECOMMENDED ACTIONS:", 20, 155);
+            doc.text("1. Submit to insurance carrier with this timestamped record", 25, 165);
+            doc.text("2. File with Florida Dept. of Environmental Protection", 25, 173);
+            doc.text("3. Cross-reference with NOAA / NWS radar archives", 25, 181);
+            
+            doc.setFontSize(8);
+            doc.text("GeoRecord v2.1 • Data stored locally • Exportable for legal use", 20, 280);
+            
+            doc.save("Everglades_Fire_Incident_Report_2026-05-11.pdf");
+        }
+
+        function downloadRecordPDF(id) {
+            const record = records.find(r => r.id === id);
+            if (!record) return;
+            
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF();
+            
+            doc.setFont("helvetica", "bold");
+            doc.setFontSize(16);
+            doc.text("GeoRecord Daily Entry", 20, 20);
+            doc.setFontSize(10);
+            doc.text(`${record.date} — ${record.location}`, 20, 28);
+            
+            doc.setFont("helvetica", "normal");
+            let yPos = 42;
+            
+            doc.text(`Sunlight: ${record.sunlight.observed} hrs observed (${record.sunlight.deviation}% deviation)`, 20, yPos);
+            yPos += 8;
+            doc.text(`Tower Signal: ${record.towers.signal} dBm (${record.towers.count} towers)`, 20, yPos);
+            yPos += 8;
+            doc.text(`Microwave: ${record.microwave.level} μW/cm² — ${record.microwave.zone}`, 20, yPos);
+            yPos += 8;
+            doc.text(`Sky: ${record.sky.contrail_pct}% contrail coverage, ${record.sky.spray_planes} spray aircraft`, 20, yPos);
+            yPos += 12;
+            
+            doc.text("Notes:", 20, yPos);
+            yPos += 7;
+            const notes = doc.splitTextToSize(record.sky.notes || "No additional notes", 170);
+            doc.text(notes, 20, yPos);
+            
+            doc.setFontSize(8);
+            doc.text("Chain-of-custody: " + new Date(record.id).toLocaleString() + " | GeoRecord v2.1", 20, 285);
+            
+            doc.save(`GeoRecord_${record.date}.pdf`);
+        }
+
+        function viewEventDetail() {
+            const eventRec = records[0];
+            if (eventRec) viewRecordDetail(eventRec.id);
+        }
+
+        function useGeolocation() {
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(position => {
+                    const lat = position.coords.latitude.toFixed(2);
+                    const lon = position.coords.longitude.toFixed(2);
+                    
+                    document.getElementById('current-location').innerText = `Current Location`;
+                    document.getElementById('current-coords').innerText = `${lat}°N, ${lon}°W`;
+                    
+                    if (skyMap) {
+                        skyMap.setView([position.coords.latitude, position.coords.longitude], 10);
+                    }
+                    
+                    showToast("Location updated. All data now contextualized to your position.");
+                });
+            } else {
+                alert("Geolocation not available in this browser.");
+            }
+        }
+
+        function hideModals() {
+            document.querySelectorAll('.fixed.inset-0').forEach(m => {
+                if (m.id === 'company-modal' || m.id === 'test-modal') {
+                    m.classList.add('hidden');
+                    m.classList.remove('flex');
+                }
+            });
+        }
+
+        // Keyboard shortcuts
+        function setupKeyboard() {
+            document.addEventListener('keydown', function(e) {
+                if (e.metaKey && e.key === "/") {
+                    e.preventDefault();
+                    const search = document.getElementById('search-input');
+                    if (search) {
+                        showSection('records');
+                        search.focus();
+                    }
+                }
+                
+                if (e.key === "?" && document.activeElement.tagName === "BODY") {
+                    e.preventDefault();
+                    showSection('daily-log');
+                }
+            });
+            
+            // Easter egg: type "geo" anywhere
+            let typed = '';
+            document.addEventListener('keypress', function(e) {
+                typed += e.key;
+                if (typed.length > 3) typed = typed.slice(-3);
+                if (typed === 'geo') {
+                    typed = '';
+                    const dash = document.getElementById('section-dashboard');
+                    if (dash && dash.classList.contains('active')) {
+                        showToast("Thank you for using GeoRecord. Truth in transparency.");
+                    }
+                }
+            });
+        }
+
+        // Initialize everything
+        function initializeApp() {
+            initializeTailwind();
+            loadData();
+            
+            // Set initial location display
+            document.getElementById('current-location').innerText = "Everglades, FL";
+            document.getElementById('current-coords').innerText = "25.76°N, 80.68°W";
+            
+            // Update dashboard
+            updateDashboard();
+            
+            // Render initial tables
+            renderRecordsTable();
+            renderCompaniesTable();
+            renderTestsTable();
+            renderFlightsList();
+            renderTowerList();
+            
+            // Set default date in log form
+            const now = new Date();
+            const dateStr = now.toISOString().slice(0, 16);
+            const dateInput = document.getElementById('log-date');
+            if (dateInput) dateInput.value = dateStr;
+            
+            // Setup keyboard
+            setupKeyboard();
+            
+            // Welcome toast
+            setTimeout(() => {
+                // showToast("Welcome to GeoRecord. All data is stored locally in your browser for privacy.", "success");
+            }, 1800);
+            
+            // Make sure dashboard is active
+            document.getElementById('section-dashboard').classList.add('active');
+            document.getElementById('nav-dashboard').classList.add('active');
+            
+            // Seed one more record if needed
+            console.log('%c[GeoRecord] Web app initialized successfully. All features ready.', 'color:#10b981');
+        }
+
+        // Boot
+        window.onload = initializeApp;
+    </script>
+</body>
+</html>
